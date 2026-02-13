@@ -3,12 +3,16 @@ import pandas as pd
 from openpyxl import load_workbook
 from copy import copy
 
-input_file = r"/Users/setyaminanton/Desktop/projects/snow/Активность городской техники_(13.02.2026).xlsx"
-template_file = r"/Users/setyaminanton/Desktop/projects/snow/Tamplate.xlsx"
+# ===== Определяем папку, где лежит скрипт =====
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-output_folder = "Отчеты_по_округам"
+input_file = os.path.join(BASE_DIR, "выгрузка.xlsx")
+template_file = os.path.join(BASE_DIR, "Tamplate.xlsx")
+
+output_folder = os.path.join(BASE_DIR, "Отчеты_по_округам")
 os.makedirs(output_folder, exist_ok=True)
 
+# ===== Читаем данные =====
 df = pd.read_excel(input_file)
 
 numeric_cols = [
@@ -49,7 +53,7 @@ for okrug in df["Округ"].unique():
 
     ws["B1"] = f"Статистика по выходу техники по данным СОК по {okrug}"
 
-    # ===== Находим строку ВСЕГО =====
+    # ===== Поиск строки ВСЕГО =====
     total_row_template = None
     for row_idx in range(start_row, ws.max_row + 1):
         if ws[f"B{row_idx}"].value == "ВСЕГО":
@@ -69,7 +73,7 @@ for okrug in df["Округ"].unique():
             "protection": copy(cell.protection),
         }
 
-    # Сохраняем объединения строки шаблона
+    # Сохраняем объединения
     template_merges = []
     for merged in ws.merged_cells.ranges:
         if merged.min_row == template_row_idx:
@@ -84,7 +88,6 @@ for okrug in df["Округ"].unique():
         r = start_row + i
         ws.insert_rows(r)
 
-        # Применяем стиль
         for col in range(2, 9):
             new_cell = ws.cell(row=r, column=col)
             style = template_style[col]
@@ -96,7 +99,6 @@ for okrug in df["Округ"].unique():
             new_cell.number_format = style["number_format"]
             new_cell.protection = copy(style["protection"])
 
-        # Заполняем данные
         ws[f"B{r}"] = row_data["Балансодержатель"]
         ws[f"C{r}"] = row_data["Всего"]
         ws[f"D{r}"] = row_data["Не_подлежит"]
@@ -107,7 +109,6 @@ for okrug in df["Округ"].unique():
         ws[f"H{r}"] = f"=G{r}/F{r}"
         ws[f"H{r}"].number_format = "0%"
 
-        # Восстанавливаем объединения
         for min_col, max_col in template_merges:
             ws.merge_cells(
                 start_row=r,
@@ -119,7 +120,7 @@ for okrug in df["Округ"].unique():
     last_data_row = start_row + len(df_okrug) - 1
     total_row = last_data_row + 1
 
-    # ===== Копируем стиль строки ВСЕГО =====
+    # ===== Стиль строки ВСЕГО =====
     if total_row_template:
         total_style = {}
         for col in range(2, 9):
