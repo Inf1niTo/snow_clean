@@ -1,0 +1,35 @@
+name: Build EXE Report Tool
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4   # новая версия
+
+      - name: Set up Python
+        uses: actions/setup-python@v5   # новая версия
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build exe
+        run: |
+          pyinstaller --onefile main.py
+
+      - name: Upload exe artifact
+        uses: actions/upload-artifact@v4   # новая версия
+        with:
+          name: report-generator
+          path: dist/main.exe
