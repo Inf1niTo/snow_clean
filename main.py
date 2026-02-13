@@ -1,18 +1,41 @@
 import os
+import sys
 import pandas as pd
 from openpyxl import load_workbook
 from copy import copy
 
-# ===== Определяем папку, где лежит скрипт =====
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# =============================
+# Определяем папку запуска
+# =============================
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 input_file = os.path.join(BASE_DIR, "выгрузка.xlsx")
 template_file = os.path.join(BASE_DIR, "Tamplate.xlsx")
-
 output_folder = os.path.join(BASE_DIR, "Отчеты_по_округам")
+
 os.makedirs(output_folder, exist_ok=True)
 
-# ===== Читаем данные =====
+# =============================
+# Проверка наличия файлов
+# =============================
+if not os.path.exists(input_file):
+    print("❌ Файл 'выгрузка.xlsx' не найден рядом с программой")
+    input("Нажмите Enter для выхода...")
+    sys.exit()
+
+if not os.path.exists(template_file):
+    print("❌ Файл 'Tamplate.xlsx' не найден рядом с программой")
+    input("Нажмите Enter для выхода...")
+    sys.exit()
+
+
+# =============================
+# Чтение данных
+# =============================
 df = pd.read_excel(input_file)
 
 numeric_cols = [
@@ -21,9 +44,13 @@ numeric_cols = [
     "В статусе «Исправно»",
     "Техника вышла на уборку по данным СОК"
 ]
+
 df[numeric_cols] = df[numeric_cols].fillna(0)
 
-# ===== Агрегация =====
+
+# =============================
+# Агрегация
+# =============================
 grouped = (
     df.groupby(["Округ", "Балансодержатель"])
       .agg(
@@ -36,7 +63,12 @@ grouped = (
       .reset_index()
 )
 
+
+# =============================
+# Формирование отчетов
+# =============================
 for okrug in df["Округ"].unique():
+
     wb = load_workbook(template_file)
 
     if "Sheet" in wb.sheetnames:
@@ -60,7 +92,7 @@ for okrug in df["Округ"].unique():
             total_row_template = row_idx
             break
 
-    # ===== Сохраняем стиль строки шаблона =====
+    # ===== Сохранение стиля шаблонной строки =====
     template_style = {}
     for col in range(2, 9):
         cell = ws.cell(row=template_row_idx, column=col)
@@ -73,21 +105,21 @@ for okrug in df["Округ"].unique():
             "protection": copy(cell.protection),
         }
 
-    # Сохраняем объединения
     template_merges = []
     for merged in ws.merged_cells.ranges:
         if merged.min_row == template_row_idx:
             template_merges.append((merged.min_col, merged.max_col))
 
-    # ===== Удаляем старые строки =====
+    # ===== Удаление старых строк =====
     if total_row_template:
         ws.delete_rows(start_row, total_row_template - start_row)
 
-    # ===== Вставляем данные =====
+    # ===== Вставка данных =====
     for i, (_, row_data) in enumerate(df_okrug.iterrows()):
         r = start_row + i
         ws.insert_rows(r)
 
+        # Применяем стиль
         for col in range(2, 9):
             new_cell = ws.cell(row=r, column=col)
             style = template_style[col]
@@ -99,6 +131,7 @@ for okrug in df["Округ"].unique():
             new_cell.number_format = style["number_format"]
             new_cell.protection = copy(style["protection"])
 
+        # Заполняем данные
         ws[f"B{r}"] = row_data["Балансодержатель"]
         ws[f"C{r}"] = row_data["Всего"]
         ws[f"D{r}"] = row_data["Не_подлежит"]
@@ -109,6 +142,7 @@ for okrug in df["Округ"].unique():
         ws[f"H{r}"] = f"=G{r}/F{r}"
         ws[f"H{r}"].number_format = "0%"
 
+        # Восстановление объединений
         for min_col, max_col in template_merges:
             ws.merge_cells(
                 start_row=r,
@@ -120,32 +154,20 @@ for okrug in df["Округ"].unique():
     last_data_row = start_row + len(df_okrug) - 1
     total_row = last_data_row + 1
 
-    # ===== Стиль строки ВСЕГО =====
+    # ===== Копирование стиля строки ВСЕГО =====
     if total_row_template:
-        total_style = {}
         for col in range(2, 9):
-            cell = ws.cell(row=total_row_template, column=col)
-            total_style[col] = {
-                "font": copy(cell.font),
-                "fill": copy(cell.fill),
-                "border": copy(cell.border),
-                "alignment": copy(cell.alignment),
-                "number_format": cell.number_format,
-                "protection": copy(cell.protection),
-            }
-
-        for col in range(2, 9):
+            template_cell = ws.cell(row=total_row_template, column=col)
             new_cell = ws.cell(row=total_row, column=col)
-            style = total_style[col]
 
-            new_cell.font = copy(style["font"])
-            new_cell.fill = copy(style["fill"])
-            new_cell.border = copy(style["border"])
-            new_cell.alignment = copy(style["alignment"])
-            new_cell.number_format = style["number_format"]
-            new_cell.protection = copy(style["protection"])
+            new_cell.font = copy(template_cell.font)
+            new_cell.fill = copy(template_cell.fill)
+            new_cell.border = copy(template_cell.border)
+            new_cell.alignment = copy(template_cell.alignment)
+            new_cell.number_format = template_cell.number_format
+            new_cell.protection = copy(template_cell.protection)
 
-    # ===== Формулы ВСЕГО =====
+    # ===== Формулы строки ВСЕГО =====
     ws[f"B{total_row}"] = "ВСЕГО"
     ws[f"C{total_row}"] = f"=SUM(C{start_row}:C{last_data_row})"
     ws[f"D{total_row}"] = f"=SUM(D{start_row}:D{last_data_row})"
@@ -174,4 +196,6 @@ for okrug in df["Округ"].unique():
     safe_name = okrug.replace("/", "-")
     wb.save(os.path.join(output_folder, f"{safe_name}.xlsx"))
 
-print("Готово ✅ Все файлы созданы в папке:", output_folder)
+
+print("\n✅ Готово! Файлы созданы в папке 'Отчеты_по_округам'")
+input("Нажмите Enter для выхода...")
